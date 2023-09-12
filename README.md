@@ -11,10 +11,9 @@ Exmaple:
 package main
 
 import (
+	"log/slog"
 	"os"
 	"strconv"
-
-	"golang.org/x/exp/slog"
 
 	slogc "github.com/supar/slog-console"
 )
