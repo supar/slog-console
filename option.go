@@ -1,9 +1,8 @@
 package slogconsole
 
 import (
+	"log/slog"
 	"sync/atomic"
-
-	"golang.org/x/exp/slog"
 )
 
 // BoolValuer is the interface that wraps Bool method

@@ -3,13 +3,12 @@ package slogconsole
 import (
 	"context"
 	"io"
+	"log/slog"
 	"os"
 	"strconv"
 	"sync"
 	"unicode"
 	"unicode/utf8"
-
-	"golang.org/x/exp/slog"
 )
 
 const (

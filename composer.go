@@ -2,12 +2,11 @@ package slogconsole
 
 import (
 	"fmt"
+	"log/slog"
 	"runtime"
 	"strconv"
 	"time"
 	"unicode/utf8"
-
-	"golang.org/x/exp/slog"
 )
 
 // Copied from slog package

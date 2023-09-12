@@ -2,9 +2,8 @@ package slogconsole
 
 import (
 	"io"
+	"log/slog"
 	"testing"
-
-	"golang.org/x/exp/slog"
 )
 
 func BenchmarkAttrs(b *testing.B) {

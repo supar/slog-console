@@ -4,14 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/exp/slog"
 )
 
 const testMessage = "Test logging, but use a somewhat realistic message length."
