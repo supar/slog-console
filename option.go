@@ -51,3 +51,11 @@ type Options struct {
 	// Default options from slog
 	slog.HandlerOptions
 }
+
+func optionalLevelVar(lv slog.Leveler) slog.Leveler {
+	if lv == nil {
+		lv = new(slog.LevelVar)
+	}
+
+	return lv
+}

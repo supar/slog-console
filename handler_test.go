@@ -62,10 +62,8 @@ func TestConsoleTextHandler(t *testing.T) {
 	buf := bytes.NewBuffer(make([]byte, 0, 1024))
 	opts := &Options{
 		Colorize: new(BoolVar),
-		HandlerOptions: slog.HandlerOptions{
-			Level: new(slog.LevelVar),
-		},
 	}
+	opts.HandlerOptions.Level = optionalLevelVar(opts.HandlerOptions.Level)
 
 	hd := New(buf, opts)
 	logger := slog.New(hd)
@@ -109,6 +107,16 @@ func TestConsoleTextHandler(t *testing.T) {
 			},
 		},
 		{
+			name: "msg+grp++attrs",
+			want: timeRE + ` INFO ` + testMessage + ` grp1.grp2.key=` + strconv.Itoa(testInt),
+			call: func(lg *slog.Logger) {
+				cl, _ := opts.Colorize.(*BoolVar)
+				cl.val.Store(false)
+
+				lg.WithGroup("grp1").WithGroup("grp2").Info(testMessage, slog.Int("key", testInt))
+			},
+		},
+		{
 			name: "msg+grp",
 			want: timeRE + ` INFO ` + testMessage,
 			call: func(lg *slog.Logger) {
@@ -116,6 +124,35 @@ func TestConsoleTextHandler(t *testing.T) {
 				cl.val.Store(false)
 
 				lg.WithGroup("grp").Info(testMessage)
+			},
+		},
+		{
+			name: "msg+grp+attrs+grp+attr",
+			want: timeRE + ` INFO ` + testMessage +
+				` grp.strkey=` + testString + ` grp.duration=` + testDuration.String() +
+				` grp.grp2.key=` + strconv.Itoa(testInt),
+			call: func(lg *slog.Logger) {
+				cl, _ := opts.Colorize.(*BoolVar)
+				cl.val.Store(false)
+
+				lg.WithGroup("grp").With(
+					slog.String("strkey", testString),
+					slog.Duration("duration", testDuration),
+				).WithGroup("grp2").Info(testMessage, slog.Int("key", testInt))
+			},
+		},
+		{
+			name: "msg+grp+attrs quoted",
+			want: timeRE + ` INFO ` + testMessage +
+				` grp.strkey="quote me"` +
+				` grp.grp2.key=` + strconv.Itoa(testInt),
+			call: func(lg *slog.Logger) {
+				cl, _ := opts.Colorize.(*BoolVar)
+				cl.val.Store(false)
+
+				lg.WithGroup("grp").With(
+					slog.String("strkey", "quote me"),
+				).WithGroup("grp2").Info(testMessage, slog.Int("key", testInt))
 			},
 		},
 		{
@@ -202,6 +239,7 @@ func TestConsoleTextHandler(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			test.call(logger)
 
+			t.Log(buf.String())
 			checkLogOutput(t, buf.String(), test.want)
 
 			buf.Reset()

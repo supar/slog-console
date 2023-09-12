@@ -2,10 +2,8 @@ package slogconsole
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
-	"runtime"
 	"strconv"
 	"sync"
 	"unicode"
@@ -26,13 +24,6 @@ const (
 	ConsoleColorWhite  = "\033[97m"
 )
 
-func addSpace(add bool) (s string) {
-	if add {
-		s = " "
-	}
-	return s
-}
-
 func appendString(dst []byte, str string) []byte {
 	if needsQuoting(str) {
 		return strconv.AppendQuote(dst, str)
@@ -40,160 +31,20 @@ func appendString(dst []byte, str string) []byte {
 	return append(dst, []byte(str)...)
 }
 
-// Copied from slog package
-func appendValue(v slog.Value, dst []byte) []byte {
-	switch v.Kind() {
-	case slog.KindString:
-		return appendString(dst, v.String())
-	case slog.KindInt64:
-		return strconv.AppendInt(dst, v.Int64(), 10)
-	case slog.KindUint64:
-		return strconv.AppendUint(dst, v.Uint64(), 10)
-	case slog.KindFloat64:
-		return strconv.AppendFloat(dst, v.Float64(), 'g', -1, 64)
-	case slog.KindBool:
-		return strconv.AppendBool(dst, v.Bool())
-	case slog.KindDuration:
-		return append(dst, v.Duration().String()...)
-	case slog.KindTime:
-		return append(dst, v.Time().String()...)
-	case slog.KindGroup:
-		return fmt.Append(dst, v.Group())
-	case slog.KindAny, slog.KindLogValuer:
-		return fmt.Append(dst, v.Any())
-	default:
-		panic(fmt.Sprintf("bad kind: %s", v.Kind()))
-	}
-}
-
 // ConsoleHandler represents console log handler
 type ConsoleHandler struct {
 	opts Options
 
+	groups       []string
 	preformatted []byte
-	prefix       []byte
+	prefix       string
 
 	mu  *sync.Mutex
 	out io.Writer
 }
 
-func (h *ConsoleHandler) appendAttr(buf *buffer, a slog.Attr, keyPref string) {
-	if h.opts.ReplaceAttr != nil {
-		a = h.opts.ReplaceAttr(nil, a)
-	}
-
-	// Resolve the Attr's value before doing anything else.
-	a.Value = a.Value.Resolve()
-	// Ignore empty Attrs.
-	if a.Equal(slog.Attr{}) {
-		return
-	}
-
-	switch a.Value.Kind() {
-	case slog.KindGroup:
-		attrs := a.Value.Group()
-		// Ignore empty groups.
-		if len(attrs) == 0 {
-			return
-		}
-
-		for _, ga := range attrs {
-			h.appendAttr(buf, ga, mergePrefWithKey(keyPref, a.Key))
-		}
-
-	default:
-		buf.writeString(addSpace(len(*buf) > 0))
-
-		buf.writeString(mergePrefWithKey(keyPref, a.Key) + "=")
-		*buf = appendValue(a.Value, *buf)
-	}
-}
-
-func (h *ConsoleHandler) appendLevel(buf *buffer, lv slog.Level, color bool) {
-	var lvStr string
-	if h.opts.StringLevel != nil {
-		lvStr = h.opts.StringLevel(lv)
-	} else {
-		lvStr = lv.String()
-	}
-
-	color = color && runtime.GOOS != "windows"
-	if !color {
-		buf.writeString(addSpace(len(*buf) > 0) + lvStr)
-		return
-	}
-
-	buf.writeString(addSpace(len(*buf) > 0))
-
-	switch {
-	case lv < slog.LevelInfo:
-		buf.writeString(ConsoleColorWhite)
-	case lv < slog.LevelWarn:
-		buf.writeString(ConsoleColorGreen)
-	case lv < slog.LevelError:
-		buf.writeString(ConsoleColorYellow)
-	default:
-		buf.writeString(ConsoleColorRed)
-	}
-
-	buf.writeString(lvStr + ConsoleColorReset)
-}
-
-// Enabled
-func (h *ConsoleHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	return level >= h.opts.Level.Level()
-}
-
-func (h *ConsoleHandler) Handle(ctx context.Context, r slog.Record) error {
-	buf := allocBuf()
-	defer buf.free()
-
-	if !r.Time.IsZero() && !h.opts.DropTime {
-		*buf = r.Time.AppendFormat(*buf, h.opts.TimeFormat)
-	}
-
-	h.appendLevel(buf, r.Level, h.opts.Colorize.Bool())
-
-	if len(r.Message) > 0 {
-		buf.writeString(addSpace(len(*buf) > 0) + r.Message)
-	}
-
-	// source
-	if h.opts.AddSource && r.PC != 0 {
-		fs := runtime.CallersFrames([]uintptr{r.PC})
-		f, _ := fs.Next()
-		h.appendAttr(buf, slog.String(slog.SourceKey, fmt.Sprintf("%s=%d", f.File, f.Line)), "")
-	}
-
-	buf.writeString(addSpace(len(*buf) > 0 && len(h.preformatted) > 0))
-	buf.write(h.preformatted)
-
-	if r.NumAttrs() > 0 {
-		r.Attrs(func(a slog.Attr) bool {
-			h.appendAttr(buf, a, string(h.prefix))
-			return true
-		})
-	}
-
-	// at the end of the day new line
-	buf.writeString("\n")
-
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	_, err := h.out.Write(*buf)
-
-	return err
-}
-
-func mergePrefWithKey(pref, key string) (v string) {
-	if len(pref) > 0 && len(key) > 0 {
-		v = pref + "." + key
-	} else {
-		v = key
-	}
-	return
-}
-
+// New creates a ConsoleHandler that writes to w, using the given options.
+// If opts is nil, the default options are used.
 func New(w io.Writer, opts *Options) (h *ConsoleHandler) {
 	if opts == nil {
 		opts = &Options{}
@@ -205,11 +56,9 @@ func New(w io.Writer, opts *Options) (h *ConsoleHandler) {
 		out:  w,
 	}
 	// defaults
+	h.opts.Level = optionalLevelVar(h.opts.Level)
 	if h.opts.Colorize == nil {
 		h.opts.Colorize = new(BoolVar)
-	}
-	if h.opts.Level == nil {
-		h.opts.Level = new(slog.LevelVar)
 	}
 	if len(h.opts.TimeFormat) == 0 {
 		h.opts.TimeFormat = defaultTimeFormat
@@ -219,6 +68,71 @@ func New(w io.Writer, opts *Options) (h *ConsoleHandler) {
 		h.out = os.Stderr
 	}
 
+	return
+}
+
+// Enabled reports whether the handler handles records at the given level.
+// The handler ignores records whose level is lower.
+func (h *ConsoleHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return level >= h.opts.Level.Level()
+}
+
+// Handle formats its argument Record as a single line of space-separated key=value items.
+//   - Omits empty time or Options.DropTime is true
+//   - Level string. Can be changed with Options.StringLevel
+//   - If the AddSource option is set and source information is available,
+//     the key is "source" and the value is output as FILE:LINE
+//
+// See Options to modify other attributes
+func (h *ConsoleHandler) Handle(ctx context.Context, r slog.Record) error {
+	cm := newComposer(h)
+	defer cm.destruct()
+
+	// write timestamp
+	cm.appendTime(r.Time)
+	// write level
+	cm.appendLevel(r.Level)
+	// message
+	if len(r.Message) > 0 {
+		cm.addSpace(cm.bufLen() > 0)
+		cm.buf.writeString(r.Message)
+	}
+	// write source
+	cm.appendSource(r.PC)
+	// write preformatted
+	cm.addSpace(cm.bufLen() > 0 && len(h.preformatted) > 0)
+	cm.buf.write(h.preformatted)
+	// write record attributes
+	if r.NumAttrs() > 0 {
+		r.Attrs(cm.walkAttrs)
+	}
+
+	// at the end of the day new line
+	cm.buf.writeString("\n")
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	_, err := h.out.Write(*cm.buf)
+
+	return err
+}
+
+// WithAttrs returns a new ConsoleHandler
+func (h *ConsoleHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return h.withAttrs(attrs)
+}
+
+// WithAttrs returns a new ConsoleHandler
+func (h *ConsoleHandler) WithGroup(name string) slog.Handler {
+	return h.withGroup(name)
+}
+
+func mergePrefWithKey(pref, key string) (v string) {
+	if len(pref) > 0 && len(key) > 0 {
+		v = pref + "." + key
+	} else {
+		v = key
+	}
 	return
 }
 
@@ -247,131 +161,8 @@ func needsQuoting(s string) bool {
 	return false
 }
 
-// Copied from encoding/json/tables.go.
-//
-// safeSet holds the value true if the ASCII character with the given array
-// position can be represented inside a JSON string without any further
-// escaping.
-//
-// All values are true except for the ASCII control characters (0-31), the
-// double quote ("), and the backslash character ("\").
-var safeSet = [utf8.RuneSelf]bool{
-	' ':      false,
-	'!':      true,
-	'"':      false,
-	'#':      true,
-	'$':      true,
-	'%':      true,
-	'&':      true,
-	'\'':     true,
-	'(':      true,
-	')':      true,
-	'*':      true,
-	'+':      true,
-	',':      true,
-	'-':      true,
-	'.':      true,
-	'/':      true,
-	'0':      true,
-	'1':      true,
-	'2':      true,
-	'3':      true,
-	'4':      true,
-	'5':      true,
-	'6':      true,
-	'7':      true,
-	'8':      true,
-	'9':      true,
-	':':      true,
-	';':      true,
-	'<':      true,
-	'=':      true,
-	'>':      true,
-	'?':      true,
-	'@':      true,
-	'A':      true,
-	'B':      true,
-	'C':      true,
-	'D':      true,
-	'E':      true,
-	'F':      true,
-	'G':      true,
-	'H':      true,
-	'I':      true,
-	'J':      true,
-	'K':      true,
-	'L':      true,
-	'M':      true,
-	'N':      true,
-	'O':      true,
-	'P':      true,
-	'Q':      true,
-	'R':      true,
-	'S':      true,
-	'T':      true,
-	'U':      true,
-	'V':      true,
-	'W':      true,
-	'X':      true,
-	'Y':      true,
-	'Z':      true,
-	'[':      true,
-	'\\':     false,
-	']':      true,
-	'^':      true,
-	'_':      true,
-	'`':      true,
-	'a':      true,
-	'b':      true,
-	'c':      true,
-	'd':      true,
-	'e':      true,
-	'f':      true,
-	'g':      true,
-	'h':      true,
-	'i':      true,
-	'j':      true,
-	'k':      true,
-	'l':      true,
-	'm':      true,
-	'n':      true,
-	'o':      true,
-	'p':      true,
-	'q':      true,
-	'r':      true,
-	's':      true,
-	't':      true,
-	'u':      true,
-	'v':      true,
-	'w':      true,
-	'x':      true,
-	'y':      true,
-	'z':      true,
-	'{':      true,
-	'|':      true,
-	'}':      true,
-	'~':      true,
-	'\u007f': true,
-}
-
-func (h *ConsoleHandler) WithGroup(name string) slog.Handler {
+func (h *ConsoleHandler) withGroup(name string) *ConsoleHandler {
 	if name == "" {
-		return h
-	}
-
-	h2 := *h
-	h2.prefix = make([]byte, 0, len(h.prefix)+len(name)+1)
-	if len(h.prefix) > 0 {
-		h2.prefix = append(h2.prefix, h.prefix...)
-		h2.prefix = append(h2.prefix, '.')
-	}
-	h2.prefix = append(h2.prefix, []byte(name)...)
-
-	return &h2
-}
-
-func (h *ConsoleHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	if len(attrs) == 0 {
 		return h
 	}
 
@@ -380,14 +171,38 @@ func (h *ConsoleHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	buf := allocBuf()
 	defer buf.free()
 
-	buf.write(h.preformatted)
+	buf.writeString(h.prefix)
+	if len(*buf) > 0 {
+		buf.writeByte('.')
+	}
+	buf.writeString(name)
+	h2.prefix = string(*buf)
 
-	for _, a := range attrs {
-		h2.appendAttr(buf, a, string(h2.prefix))
+	// groups list to use them in the AttrReplace
+	h2.groups = make([]string, len(h2.groups)+1)
+	copy(h2.groups, h.groups)
+	h2.groups[len(h2.groups)-1] = name
+
+	return &h2
+}
+
+func (h *ConsoleHandler) withAttrs(attrs []slog.Attr) *ConsoleHandler {
+	if len(attrs) == 0 {
+		return h
 	}
 
-	h2.preformatted = make([]byte, len(*buf))
-	copy(h2.preformatted, *buf)
+	h2 := *h
+
+	cm := newComposer(h)
+	defer cm.destruct()
+
+	cm.buf.write(h.preformatted)
+	for _, a := range attrs {
+		cm.appendAttr(a, "")
+	}
+
+	h2.preformatted = make([]byte, len(*cm.buf))
+	copy(h2.preformatted, *cm.buf)
 
 	return &h2
 }
