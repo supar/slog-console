@@ -62,7 +62,7 @@ func TestConsoleTextHandler(t *testing.T) {
 	opts := &Options{
 		Colorize: new(BoolVar),
 	}
-	opts.HandlerOptions.Level = optionalLevelVar(opts.HandlerOptions.Level)
+	opts.Level = optionalLevelVar(opts.Level)
 
 	hd := New(buf, opts)
 	logger := slog.New(hd)
