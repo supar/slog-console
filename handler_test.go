@@ -141,6 +141,42 @@ func TestConsoleTextHandler(t *testing.T) {
 			},
 		},
 		{
+			name: "msg+grpvalue",
+			want: timeRE + ` INFO ` + testMessage +
+				` grp.strkey=` + testString + ` grp.duration=` + testDuration.String() +
+				` key=` + strconv.Itoa(testInt),
+			call: func(lg *slog.Logger) {
+				cl, _ := opts.Colorize.(*BoolVar)
+				cl.val.Store(false)
+
+				lg.With(
+					"grp",
+					slog.GroupValue(
+						slog.String("strkey", testString),
+						slog.Duration("duration", testDuration),
+					),
+				).Info(testMessage, slog.Int("key", testInt))
+			},
+		},
+		{
+			name: "msg+grp+grpvalue",
+			want: timeRE + ` INFO ` + testMessage +
+				` grp.inner.strkey=` + testString + ` grp.inner.duration=` + testDuration.String() +
+				` grp.key=` + strconv.Itoa(testInt),
+			call: func(lg *slog.Logger) {
+				cl, _ := opts.Colorize.(*BoolVar)
+				cl.val.Store(false)
+
+				lg.WithGroup("grp").With(
+					"inner",
+					slog.GroupValue(
+						slog.String("strkey", testString),
+						slog.Duration("duration", testDuration),
+					),
+				).Info(testMessage, slog.Int("key", testInt))
+			},
+		},
+		{
 			name: "msg+grp+attrs quoted",
 			want: timeRE + ` INFO ` + testMessage +
 				` grp.strkey="quote me"` +

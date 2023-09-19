@@ -77,9 +77,7 @@ func (c *composer) appendAttr(a slog.Attr, keyPref string) {
 		return
 	}
 
-	if len(keyPref) > 0 {
-		keyPref = mergePrefWithKey(keyPref, string(c.h.prefix))
-	} else {
+	if len(keyPref) == 0 {
 		keyPref = string(c.h.prefix)
 	}
 

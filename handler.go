@@ -126,13 +126,19 @@ func (h *ConsoleHandler) WithGroup(name string) slog.Handler {
 	return h.withGroup(name)
 }
 
-func mergePrefWithKey(pref, key string) (v string) {
-	if len(pref) > 0 && len(key) > 0 {
-		v = pref + "." + key
-	} else {
-		v = key
+func mergePrefWithKey(pref, key string) string {
+	if len(pref) > 0 {
+		// we have pref and key
+		if len(key) > 0 {
+			return pref + "." + key
+		}
+
+		// we have only pref
+		return pref
 	}
-	return
+
+	// fallback to key
+	return key
 }
 
 // Copied from slog/text_handler.go
@@ -197,7 +203,7 @@ func (h *ConsoleHandler) withAttrs(attrs []slog.Attr) *ConsoleHandler {
 
 	cm.buf.write(h.preformatted)
 	for _, a := range attrs {
-		cm.appendAttr(a, "")
+		cm.appendAttr(a, h2.prefix)
 	}
 
 	h2.preformatted = make([]byte, len(*cm.buf))
