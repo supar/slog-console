@@ -128,7 +128,7 @@ func (c *composer) appendLevel(lv slog.Level) {
 }
 
 func (c *composer) appendTime(tm time.Time) {
-	if tm.IsZero() && c.h.opts.DropTime {
+	if tm.IsZero() || c.h.opts.DropTime {
 		return
 	}
 

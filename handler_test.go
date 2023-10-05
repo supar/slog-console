@@ -37,6 +37,13 @@ func checkLogOutput(t *testing.T, got, wantRegexp string) {
 	}
 }
 
+func newBoolBar(v bool) (bv *BoolVar) {
+	bv = &BoolVar{}
+	bv.Set(v)
+
+	return
+}
+
 // clean prepares log output for comparison.
 func clean(s string) string {
 	if len(s) > 0 && s[len(s)-1] == '\n' {
@@ -59,69 +66,73 @@ const (
 
 func TestConsoleTextHandler(t *testing.T) {
 	buf := bytes.NewBuffer(make([]byte, 0, 1024))
-	opts := &Options{
-		Colorize: new(BoolVar),
-	}
-	opts.Level = optionalLevelVar(opts.Level)
 
-	hd := New(buf, opts)
-	logger := slog.New(hd)
+	//opts := &Options{
+	//	Colorize: new(BoolVar),
+	//}
+	//opts.Level = optionalLevelVar(opts.Level)
 
-	lv, _ := opts.Level.(*slog.LevelVar)
+	lv := &slog.LevelVar{}
 	lv.Set(slog.LevelDebug)
 
 	for _, test := range []struct {
 		name string
 		want string
+		opts *Options
 		call func(*slog.Logger)
 	}{
 		{
 			name: "msg",
 			want: timeRE + ` INFO ` + testMessage,
+			opts: &Options{
+				Colorize: newBoolBar(false),
+				Level:    lv,
+			},
 			call: func(lg *slog.Logger) {
-				cl, _ := opts.Colorize.(*BoolVar)
-				cl.val.Store(false)
-
 				lg.Info(testMessage)
 			},
 		},
 		{
 			name: "msg+attrs",
 			want: timeRE + ` INFO ` + testMessage + ` int_key=` + strconv.Itoa(testInt),
+			opts: &Options{
+				Colorize: newBoolBar(false),
+				Level:    lv,
+			},
 			call: func(lg *slog.Logger) {
-				cl, _ := opts.Colorize.(*BoolVar)
-				cl.val.Store(false)
-
 				lg.Info(testMessage, slog.Int("int_key", testInt))
 			},
 		},
 		{
 			name: "msg+grp+attrs",
 			want: timeRE + ` INFO ` + testMessage + ` grp.key=` + strconv.Itoa(testInt),
+			opts: &Options{
+				Colorize: newBoolBar(false),
+				Level:    lv,
+			},
 			call: func(lg *slog.Logger) {
-				cl, _ := opts.Colorize.(*BoolVar)
-				cl.val.Store(false)
-
 				lg.WithGroup("grp").Info(testMessage, slog.Int("key", testInt))
 			},
 		},
 		{
 			name: "msg+grp++attrs",
 			want: timeRE + ` INFO ` + testMessage + ` grp1.grp2.key=` + strconv.Itoa(testInt),
+			opts: &Options{
+				Colorize: newBoolBar(false),
+				Level:    lv,
+			},
 			call: func(lg *slog.Logger) {
-				cl, _ := opts.Colorize.(*BoolVar)
-				cl.val.Store(false)
-
 				lg.WithGroup("grp1").WithGroup("grp2").Info(testMessage, slog.Int("key", testInt))
 			},
 		},
 		{
 			name: "msg+grp",
 			want: timeRE + ` INFO ` + testMessage,
+			opts: &Options{
+				Colorize: newBoolBar(false),
+				Level:    lv,
+			},
 			call: func(lg *slog.Logger) {
-				cl, _ := opts.Colorize.(*BoolVar)
-				cl.val.Store(false)
-
 				lg.WithGroup("grp").Info(testMessage)
 			},
 		},
@@ -130,10 +141,11 @@ func TestConsoleTextHandler(t *testing.T) {
 			want: timeRE + ` INFO ` + testMessage +
 				` grp.strkey=` + testString + ` grp.duration=` + testDuration.String() +
 				` grp.grp2.key=` + strconv.Itoa(testInt),
+			opts: &Options{
+				Colorize: newBoolBar(false),
+				Level:    lv,
+			},
 			call: func(lg *slog.Logger) {
-				cl, _ := opts.Colorize.(*BoolVar)
-				cl.val.Store(false)
-
 				lg.WithGroup("grp").With(
 					slog.String("strkey", testString),
 					slog.Duration("duration", testDuration),
@@ -145,10 +157,11 @@ func TestConsoleTextHandler(t *testing.T) {
 			want: timeRE + ` INFO ` + testMessage +
 				` grp.strkey=` + testString + ` grp.duration=` + testDuration.String() +
 				` key=` + strconv.Itoa(testInt),
+			opts: &Options{
+				Colorize: newBoolBar(false),
+				Level:    lv,
+			},
 			call: func(lg *slog.Logger) {
-				cl, _ := opts.Colorize.(*BoolVar)
-				cl.val.Store(false)
-
 				lg.With(
 					"grp",
 					slog.GroupValue(
@@ -163,10 +176,11 @@ func TestConsoleTextHandler(t *testing.T) {
 			want: timeRE + ` INFO ` + testMessage +
 				` grp.inner.strkey=` + testString + ` grp.inner.duration=` + testDuration.String() +
 				` grp.key=` + strconv.Itoa(testInt),
+			opts: &Options{
+				Colorize: newBoolBar(false),
+				Level:    lv,
+			},
 			call: func(lg *slog.Logger) {
-				cl, _ := opts.Colorize.(*BoolVar)
-				cl.val.Store(false)
-
 				lg.WithGroup("grp").With(
 					"inner",
 					slog.GroupValue(
@@ -181,10 +195,11 @@ func TestConsoleTextHandler(t *testing.T) {
 			want: timeRE + ` INFO ` + testMessage +
 				` grp.strkey="quote me"` +
 				` grp.grp2.key=` + strconv.Itoa(testInt),
+			opts: &Options{
+				Colorize: newBoolBar(false),
+				Level:    lv,
+			},
 			call: func(lg *slog.Logger) {
-				cl, _ := opts.Colorize.(*BoolVar)
-				cl.val.Store(false)
-
 				lg.WithGroup("grp").With(
 					slog.String("strkey", "quote me"),
 				).WithGroup("grp2").Info(testMessage, slog.Int("key", testInt))
@@ -199,10 +214,11 @@ func TestConsoleTextHandler(t *testing.T) {
 				}
 				return timeRE + ` ` + lv + ` ` + testMessage + ` grp.key=` + strconv.Itoa(testInt)
 			}(),
+			opts: &Options{
+				Colorize: newBoolBar(true),
+				Level:    lv,
+			},
 			call: func(lg *slog.Logger) {
-				cl, _ := opts.Colorize.(*BoolVar)
-				cl.val.Store(true)
-
 				lg.WithGroup("grp").Debug(testMessage, "key", testInt)
 			},
 		},
@@ -215,10 +231,11 @@ func TestConsoleTextHandler(t *testing.T) {
 				}
 				return timeRE + ` ` + lv + ` ` + testMessage + ` grp.key=` + strconv.Itoa(testInt)
 			}(),
+			opts: &Options{
+				Colorize: newBoolBar(true),
+				Level:    lv,
+			},
 			call: func(lg *slog.Logger) {
-				cl, _ := opts.Colorize.(*BoolVar)
-				cl.val.Store(true)
-
 				lg.WithGroup("grp").Info(testMessage, "key", testInt)
 			},
 		},
@@ -231,10 +248,11 @@ func TestConsoleTextHandler(t *testing.T) {
 				}
 				return timeRE + ` ` + lv + ` ` + testMessage + ` grp.key=` + strconv.Itoa(testInt)
 			}(),
+			opts: &Options{
+				Colorize: newBoolBar(true),
+				Level:    lv,
+			},
 			call: func(lg *slog.Logger) {
-				cl, _ := opts.Colorize.(*BoolVar)
-				cl.val.Store(true)
-
 				lg.WithGroup("grp").Warn(testMessage, "key", testInt)
 			},
 		},
@@ -247,10 +265,11 @@ func TestConsoleTextHandler(t *testing.T) {
 				}
 				return timeRE + ` ` + lv + ` ` + testMessage + ` grp.key=` + strconv.Itoa(testInt)
 			}(),
+			opts: &Options{
+				Colorize: newBoolBar(true),
+				Level:    lv,
+			},
 			call: func(lg *slog.Logger) {
-				cl, _ := opts.Colorize.(*BoolVar)
-				cl.val.Store(true)
-
 				lg.WithGroup("grp").Error(testMessage, "key", testInt)
 			},
 		},
@@ -263,15 +282,31 @@ func TestConsoleTextHandler(t *testing.T) {
 				}
 				return timeRE + ` ` + lv + ` ` + testMessage + ` grp.key=` + strconv.Itoa(testInt)
 			}(),
+			opts: &Options{
+				Colorize: newBoolBar(true),
+				Level:    lv,
+			},
 			call: func(lg *slog.Logger) {
-				cl, _ := opts.Colorize.(*BoolVar)
-				cl.val.Store(true)
-
 				lg.WithGroup("grp").LogAttrs(context.Background(), slog.LevelError+4, testMessage, slog.Int("key", testInt))
+			},
+		},
+		{
+			name: "skip time",
+			want: `ERROR ` + testMessage + ` grp.key=` + strconv.Itoa(testInt),
+			opts: &Options{
+				Colorize: newBoolBar(false),
+				DropTime: true,
+				Level:    lv,
+			},
+			call: func(lg *slog.Logger) {
+				lg.WithGroup("grp").LogAttrs(context.Background(), slog.LevelError, testMessage, slog.Int("key", testInt))
 			},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			hd := New(buf, test.opts)
+			logger := slog.New(hd)
+
 			test.call(logger)
 
 			t.Log(buf.String())
